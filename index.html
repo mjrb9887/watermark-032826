@@ -360,8 +360,8 @@ body {
     <div class="ws-logo">
       <div class="ws-logo-icon"><i class="ti ti-droplet-half-2" aria-hidden="true"></i></div>
       <div>
-        <div class="ws-logo-name">M&M Watermark App</div>
-        <div class="ws-logo-sub">Made with love, exclusively for my beloved <b>Marjorie B.</b></div>
+        <div class="ws-logo-name">Watermark Studio</div>
+        <div class="ws-logo-sub">Add text &amp; image watermarks</div>
       </div>
     </div>
     <span class="ws-badge">Personal use</span>
@@ -431,6 +431,17 @@ body {
             <button class="ws-btn-bulk-dl" id="btnDlAll" onclick="downloadAll()" disabled>
               <i class="ti ti-download" aria-hidden="true"></i> Download all
             </button>
+          </div>
+        </div>
+        <div id="bulkPreviewWrap" style="display:none;margin-top:10px">
+          <div class="ws-card">
+            <div class="ws-card-head" style="display:flex;align-items:center;justify-content:space-between">
+              <span>Watermark preview</span>
+              <span id="bulkPreviewLabel" style="font-size:11px;color:var(--ws-amber-text);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+            </div>
+            <div style="padding:10px">
+              <img id="bulkPreviewImg" src="" alt="Preview" style="width:100%;border-radius:var(--ws-r-sm);display:block">
+            </div>
           </div>
         </div>
         <div class="ws-actions" style="margin-top:8px">
@@ -537,9 +548,9 @@ body {
           <div class="ws-field">
             <label>Rotation</label>
             <div class="ws-slider-row">
-              <input type="range" id="rotation" min="-90" max="90" value="-30" step="1"
+              <input type="range" id="rotation" min="-90" max="90" value="0" step="1"
                 oninput="updateVal('rotation','rotationVal','°'); render()">
-              <span class="ws-slider-val" id="rotationVal">-30°</span>
+              <span class="ws-slider-val" id="rotationVal">0°</span>
             </div>
           </div>
           <div class="ws-field">
@@ -560,11 +571,143 @@ body {
 <input type="file" id="wmImgInput" accept="image/*" onchange="loadWmImage(this)">
 
 <script>
-let baseImg = null, wmImg = null, wmMode = 'text', pos = 'br', appMode = 'single';
-let queue = []; // {file, name, ext, mimeType, objectUrl, thumb, dataUrl, status}
+/* ── State ───────────────────────────────── */
+let baseImg = null;        // single-mode source image (decoded)
+let baseFileMeta = null;   // {name, base, ext} for single image
+let wmImg = null;          // logo watermark image (decoded)
+let wmMode = 'text';       // 'text' | 'image'
+let pos = 'br';
+let appMode = 'single';    // 'single' | 'bulk'
+let queue = [];            // {name, base, ext, srcDataUrl, srcImg, dataUrl, status}
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+
+/* ── Filename / mime helpers ─────────────── */
+function splitName(fileName) {
+  const dot = fileName.lastIndexOf('.');
+  let base = dot > 0 ? fileName.substring(0, dot) : fileName;
+  let ext = dot > 0 ? fileName.substring(dot + 1).toLowerCase() : 'png';
+  if (ext === 'jpeg') ext = 'jpg';
+  return { base, ext };
+}
+function getMimeFromExt(ext) {
+  const map = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+  return map[ext] || 'image/png';
+}
+
+/* ── Current watermark settings (single source of truth) ── */
+function readSettings() {
+  return {
+    opacity: parseInt(document.getElementById('opacity').value, 10) / 100,
+    rotation: parseInt(document.getElementById('rotation').value, 10) * Math.PI / 180,
+    tile: document.getElementById('tileMode').value,
+    text: document.getElementById('wmText').value || '\u00A9 Watermark',
+    fontSize: parseInt(document.getElementById('fontSize').value, 10),
+    color: document.getElementById('wmColor').value,
+    fontStyle: document.getElementById('fontStyle').value,
+    logoSize: parseInt(document.getElementById('wmImgSize').value, 10) / 100,
+  };
+}
+
+/* ── THE single unified renderer ─────────── */
+/* Draws sourceImg + watermark into targetCanvas at full resolution. */
+function drawWatermarked(sourceImg, targetCanvas) {
+  const w = sourceImg.naturalWidth || sourceImg.width;
+  const h = sourceImg.naturalHeight || sourceImg.height;
+  targetCanvas.width = w;
+  targetCanvas.height = h;
+  const c = targetCanvas.getContext('2d');
+  c.clearRect(0, 0, w, h);
+  c.drawImage(sourceImg, 0, 0, w, h);
+
+  const s = readSettings();
+  c.save();
+  c.globalAlpha = s.opacity;
+  if (wmMode === 'text') {
+    drawTextWatermark(c, w, h, s);
+  } else if (wmMode === 'image' && wmImg) {
+    drawLogoWatermark(c, w, h, s);
+  }
+  c.restore();
+}
+
+function getAnchor(cw, ch, w, h, padX, padY) {
+  switch (pos) {
+    case 'tl': return [padX + w / 2, padY + h / 2];
+    case 'tc': return [cw / 2, padY + h / 2];
+    case 'tr': return [cw - padX - w / 2, padY + h / 2];
+    case 'ml': return [padX + w / 2, ch / 2];
+    case 'center': return [cw / 2, ch / 2];
+    case 'mr': return [cw - padX - w / 2, ch / 2];
+    case 'bl': return [padX + w / 2, ch - padY - h / 2];
+    case 'bc': return [cw / 2, ch - padY - h / 2];
+    default: return [cw - padX - w / 2, ch - padY - h / 2];
+  }
+}
+
+function drawTextWatermark(c, cw, ch, s) {
+  const scaledSize = Math.max(10, Math.round(s.fontSize * (cw / 600)));
+  c.font = `${s.fontStyle} ${scaledSize}px sans-serif`;
+  c.fillStyle = s.color;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  const tw = c.measureText(s.text).width;
+  const th = scaledSize * 1.4;
+  const pad = scaledSize * 1.5;
+  if (s.tile === 'tile') {
+    const stepX = Math.max(tw * 2.5, 40);
+    const stepY = Math.max(th * 3, 40);
+    let rowIdx = 0;
+    for (let y = -stepY; y < ch + stepY; y += stepY) {
+      const offset = (rowIdx % 2 === 0) ? 0 : stepX / 2;
+      for (let x = -stepX; x < cw + stepX; x += stepX) {
+        c.save();
+        c.translate(x + offset, y);
+        c.rotate(s.rotation);
+        c.fillText(s.text, 0, 0);
+        c.restore();
+      }
+      rowIdx++;
+    }
+  } else {
+    const [ax, ay] = getAnchor(cw, ch, tw, th, pad, pad);
+    c.save();
+    c.translate(ax, ay);
+    c.rotate(s.rotation);
+    c.fillText(s.text, 0, 0);
+    c.restore();
+  }
+}
+
+function drawLogoWatermark(c, cw, ch, s) {
+  const wmW = Math.max(8, Math.round(cw * s.logoSize));
+  const wmH = Math.round(wmW * wmImg.naturalHeight / wmImg.naturalWidth);
+  const pad = wmW * 0.3;
+  if (s.tile === 'tile') {
+    const stepX = wmW * 2.5;
+    const stepY = wmH * 2.5;
+    let rowIdx = 0;
+    for (let y = -stepY; y < ch + stepY; y += stepY) {
+      const offset = (rowIdx % 2 === 0) ? 0 : stepX / 2;
+      for (let x = -stepX; x < cw + stepX; x += stepX) {
+        c.save();
+        c.translate(x + offset, y);
+        c.rotate(s.rotation);
+        c.drawImage(wmImg, -wmW / 2, -wmH / 2, wmW, wmH);
+        c.restore();
+      }
+      rowIdx++;
+    }
+  } else {
+    const [ax, ay] = getAnchor(cw, ch, wmW, wmH, pad, pad);
+    c.save();
+    c.translate(ax, ay);
+    c.rotate(s.rotation);
+    c.drawImage(wmImg, -wmW / 2, -wmH / 2, wmW, wmH);
+    c.restore();
+  }
+}
 
 /* ── App mode switch ─────────────────────── */
 function switchAppMode(m, el) {
@@ -573,9 +716,34 @@ function switchAppMode(m, el) {
   document.getElementById('bulkView').style.display = m === 'bulk' ? 'block' : 'none';
   document.querySelectorAll('.ws-mode-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
+  refreshPreview();
 }
 
-/* ── Drag/drop single ────────────────────── */
+/* ── Watermark type tabs ─────────────────── */
+function setMode(m, el) {
+  wmMode = m;
+  document.getElementById('textPanel').style.display = m === 'text' ? 'flex' : 'none';
+  document.getElementById('imagePanel').style.display = m === 'image' ? 'flex' : 'none';
+  document.querySelectorAll('.ws-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  refreshPreview();
+}
+
+function setPos(p, el) {
+  pos = p;
+  document.querySelectorAll('.ws-pos-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  refreshPreview();
+}
+
+function updateVal(id, outId, suffix) {
+  document.getElementById(outId).textContent = document.getElementById(id).value + suffix;
+}
+
+/* render() is the oninput hook used across all controls */
+function render() { refreshPreview(); }
+
+/* ── Single-image drag/drop + load ───────── */
 const dz = document.getElementById('dropZone');
 dz.addEventListener('click', e => {
   if (e.target === dz || e.target.closest('.ws-empty')) document.getElementById('fileInput').click();
@@ -583,250 +751,162 @@ dz.addEventListener('click', e => {
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
 dz.addEventListener('drop', e => {
-  e.preventDefault(); dz.classList.remove('drag-over');
+  e.preventDefault();
+  dz.classList.remove('drag-over');
   const f = e.dataTransfer.files[0];
-  if (f && f.type.startsWith('image/')) loadFromFile(f, true);
+  if (f && f.type.startsWith('image/')) loadSingleFile(f);
 });
 
-/* ── Single image load ───────────────────── */
-function loadSingleImage(inp) { if (inp.files[0]) loadFromFile(inp.files[0], true); }
+function loadSingleImage(inp) { if (inp.files[0]) loadSingleFile(inp.files[0]); inp.value = ''; }
 
-function loadFromFile(file, isSingle) {
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  img.onload = () => {
-    if (isSingle) {
+function loadSingleFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
       baseImg = img;
-      baseImg._file = file;
+      baseFileMeta = splitName(file.name);
       document.getElementById('dropHint').style.display = 'none';
       canvas.style.display = 'block';
       document.getElementById('downloadBtn').disabled = false;
-      render();
-    }
-    URL.revokeObjectURL(url);
+      refreshPreview();
+    };
+    img.src = e.target.result;
   };
-  img.src = url;
+  reader.readAsDataURL(file);
 }
 
-/* ── Watermark type mode ─────────────────── */
-function setMode(m, el) {
-  wmMode = m;
-  document.getElementById('textPanel').style.display = m === 'text' ? 'flex' : 'none';
-  document.getElementById('imagePanel').style.display = m === 'image' ? 'flex' : 'none';
-  document.querySelectorAll('.ws-tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  render();
-}
-
-function setPos(p, el) {
-  pos = p;
-  document.querySelectorAll('.ws-pos-btn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  render();
-}
-
-function updateVal(id, outId, suffix) {
-  document.getElementById(outId).textContent = document.getElementById(id).value + suffix;
-}
-
-/* ── Logo watermark image ────────────────── */
+/* ── Logo watermark load ─────────────────── */
 function loadWmImage(inp) {
   if (!inp.files[0]) return;
-  document.getElementById('wmImgName').textContent = inp.files[0].name;
-  const url = URL.createObjectURL(inp.files[0]);
-  const img = new Image();
-  img.onload = () => { wmImg = img; render(); URL.revokeObjectURL(url); };
-  img.src = url;
+  const file = inp.files[0];
+  document.getElementById('wmImgName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => { wmImg = img; refreshPreview(); };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  inp.value = '';
 }
 
-/* ── Canvas render (single preview) ─────── */
-function render() {
+/* ── Unified preview dispatcher ──────────── */
+let _previewTimer = null;
+function refreshPreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(() => {
+    if (appMode === 'single') drawSinglePreview();
+    else drawBulkPreview();
+  }, 50);
+}
+
+function drawSinglePreview() {
   if (!baseImg) return;
-  canvas.width = baseImg.naturalWidth;
-  canvas.height = baseImg.naturalHeight;
-  ctx.drawImage(baseImg, 0, 0);
-  applyWatermarkToCtx(ctx, canvas.width, canvas.height);
+  drawWatermarked(baseImg, canvas);
 }
 
-function applyWatermarkToCtx(c, w, h) {
-  const opacity = parseInt(document.getElementById('opacity').value) / 100;
-  const rot = parseInt(document.getElementById('rotation').value) * Math.PI / 180;
-  const tile = document.getElementById('tileMode').value;
-  c.save();
-  c.globalAlpha = opacity;
-  if (wmMode === 'text') drawText(c, w, h, tile, rot);
-  else if (wmMode === 'image' && wmImg) drawImg(c, w, h, tile, rot);
-  c.restore();
-}
-
-/* ── Draw helpers ────────────────────────── */
-function getAnchor(cw, ch, w, h, padX, padY) {
-  switch(pos) {
-    case 'tl': return [padX + w/2, padY + h/2];
-    case 'tc': return [cw/2, padY + h/2];
-    case 'tr': return [cw - padX - w/2, padY + h/2];
-    case 'ml': return [padX + w/2, ch/2];
-    case 'center': return [cw/2, ch/2];
-    case 'mr': return [cw - padX - w/2, ch/2];
-    case 'bl': return [padX + w/2, ch - padY - h/2];
-    case 'bc': return [cw/2, ch - padY - h/2];
-    default:   return [cw - padX - w/2, ch - padY - h/2];
-  }
-}
-
-function drawText(c, cw, ch, tile, rot) {
-  const text = document.getElementById('wmText').value || '© Watermark';
-  const size = parseInt(document.getElementById('fontSize').value);
-  const color = document.getElementById('wmColor').value;
-  const style = document.getElementById('fontStyle').value;
-  const scaledSize = Math.round(size * (cw / 600));
-  c.font = `${style} ${scaledSize}px sans-serif`;
-  c.fillStyle = color;
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  const w = c.measureText(text).width;
-  const h = scaledSize * 1.4;
-  const pad = scaledSize * 1.5;
-  if (tile === 'tile') {
-    const stepX = w * 2.5, stepY = h * 3;
-    for (let y = -stepY; y < ch + stepY; y += stepY) {
-      for (let x = -stepX; x < cw + stepX; x += stepX) {
-        c.save();
-        c.translate(x + (Math.floor(y/stepY) % 2 === 0 ? 0 : stepX/2), y);
-        c.rotate(rot); c.fillText(text, 0, 0); c.restore();
-      }
-    }
-  } else {
-    const [ax, ay] = getAnchor(cw, ch, w, h, pad, pad);
-    c.save(); c.translate(ax, ay); c.rotate(rot); c.fillText(text, 0, 0); c.restore();
-  }
-}
-
-function drawImg(c, cw, ch, tile, rot) {
-  const sizePct = parseInt(document.getElementById('wmImgSize').value) / 100;
-  const wmW = Math.round(cw * sizePct);
-  const wmH = Math.round(wmW * wmImg.height / wmImg.width);
-  const pad = wmW * 0.3;
-  if (tile === 'tile') {
-    const stepX = wmW * 2.5, stepY = wmH * 2.5;
-    for (let y = -stepY; y < ch + stepY; y += stepY) {
-      for (let x = -stepX; x < cw + stepX; x += stepX) {
-        c.save();
-        c.translate(x + (Math.floor(y/stepY) % 2 === 0 ? 0 : stepX/2), y);
-        c.rotate(rot); c.drawImage(wmImg, -wmW/2, -wmH/2, wmW, wmH); c.restore();
-      }
-    }
-  } else {
-    const [ax, ay] = getAnchor(cw, ch, wmW, wmH, pad, pad);
-    c.save(); c.translate(ax, ay); c.rotate(rot); c.drawImage(wmImg, -wmW/2, -wmH/2, wmW, wmH); c.restore();
-  }
+function drawBulkPreview() {
+  const wrap = document.getElementById('bulkPreviewWrap');
+  const imgEl = document.getElementById('bulkPreviewImg');
+  const lbl = document.getElementById('bulkPreviewLabel');
+  const first = queue.find(i => i.srcImg);
+  if (!first) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  lbl.textContent = first.name;
+  const tmp = document.createElement('canvas');
+  drawWatermarked(first.srcImg, tmp);
+  imgEl.src = tmp.toDataURL('image/jpeg', 0.85);
 }
 
 /* ── Single export ───────────────────────── */
-function getOutputFilename(originalName, mimeType) {
-  const dot = originalName.lastIndexOf('.');
-  let base, ext;
-  if (dot > 0) {
-    base = originalName.substring(0, dot);
-    ext = originalName.substring(dot + 1).toLowerCase();
-  } else {
-    base = originalName;
-    ext = 'png';
-  }
-  // Normalise jpeg -> jpg
-  if (ext === 'jpeg') ext = 'jpg';
-  return `${base}-watermark.${ext}`;
-}
-
-function getMimeFromExt(ext) {
-  const map = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
-  return map[ext] || 'image/png';
-}
-
 function downloadSingle() {
   if (!baseImg) return;
-  const file = baseImg._file;
-  const filename = file ? getOutputFilename(file.name, file.type) : 'image-watermark.png';
-  const dot = filename.lastIndexOf('.');
-  const ext = dot > 0 ? filename.substring(dot + 1) : 'png';
-  const mime = getMimeFromExt(ext);
+  drawWatermarked(baseImg, canvas);
+  const ext = baseFileMeta ? baseFileMeta.ext : 'png';
+  const base = baseFileMeta ? baseFileMeta.base : 'image';
   const link = document.createElement('a');
-  link.download = filename;
-  link.href = canvas.toDataURL(mime, 0.92);
+  link.download = `${base}-watermark.${ext}`;
+  link.href = canvas.toDataURL(getMimeFromExt(ext), 0.92);
   link.click();
 }
 
 /* ── Bulk queue ──────────────────────────── */
 function addToQueue(inp) {
-  const files = Array.from(inp.files);
-  files.forEach(file => {
-    if (!file.type.startsWith('image/')) return;
-    const dot = file.name.lastIndexOf('.');
-    const base = dot > 0 ? file.name.substring(0, dot) : file.name;
-    let ext = dot > 0 ? file.name.substring(dot + 1).toLowerCase() : 'png';
-    if (ext === 'jpeg') ext = 'jpg';
-    const item = { file, name: file.name, base, ext, mimeType: file.type, objectUrl: URL.createObjectURL(file), thumb: null, dataUrl: null, status: 'pending' };
-    queue.push(item);
-  });
+  const files = Array.from(inp.files).filter(f => f.type.startsWith('image/'));
   inp.value = '';
+  if (files.length === 0) return;
+  let remaining = files.length;
+  files.forEach(file => {
+    const { base, ext } = splitName(file.name);
+    const item = { name: file.name, base, ext, srcDataUrl: null, srcImg: null, dataUrl: null, status: 'pending' };
+    queue.push(item);
+    const reader = new FileReader();
+    reader.onload = e => {
+      item.srcDataUrl = e.target.result;
+      const img = new Image();
+      img.onload = () => {
+        item.srcImg = img;
+        if (--remaining === 0) finishQueueAdd();
+      };
+      img.onerror = () => { item.status = 'error'; if (--remaining === 0) finishQueueAdd(); };
+      img.src = e.target.result;
+    };
+    reader.onerror = () => { item.status = 'error'; if (--remaining === 0) finishQueueAdd(); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function finishQueueAdd() {
   renderQueue();
   updateBulkButtons();
+  refreshPreview();
 }
 
 function renderQueue() {
   const list = document.getElementById('queueList');
-  const empty = document.getElementById('queueEmpty');
   document.getElementById('queueCount').textContent = `${queue.length} image${queue.length !== 1 ? 's' : ''}`;
+  list.innerHTML = '';
   if (queue.length === 0) {
-    list.innerHTML = '';
-    list.appendChild(empty);
-    empty.style.display = 'block';
+    list.innerHTML =
+      '<div class="ws-queue-empty">' +
+      '<i class="ti ti-stack-2" style="font-size:28px;color:var(--ws-dim);display:block;margin-bottom:6px" aria-hidden="true"></i>' +
+      'No images yet \u2014 add some below' +
+      '</div>';
     return;
   }
-  empty.style.display = 'none';
-  // Re-render all items
-  list.innerHTML = '';
   queue.forEach((item, idx) => {
     const row = document.createElement('div');
     row.className = 'ws-queue-item';
-    row.id = `qi-${idx}`;
-
-    const thumbSrc = item.thumb || item.objectUrl;
-    const statusClass = item.status;
-    const statusLabel = { pending: 'Pending', processing: 'Processing…', done: 'Done', error: 'Error' }[item.status] || item.status;
+    const statusLabel = { pending: 'Pending', processing: 'Processing\u2026', done: 'Done', error: 'Error' }[item.status] || item.status;
     const outName = `${item.base}-watermark.${item.ext}`;
-
-    row.innerHTML = `
-      <img class="ws-queue-thumb" src="${thumbSrc}" alt="">
-      <div class="ws-queue-info">
-        <div class="ws-queue-name" title="${item.name}">${item.name}</div>
-        <div class="ws-queue-meta">→ ${outName}</div>
-      </div>
-      <div class="ws-queue-status"><span class="ws-status-badge ${statusClass}">${statusLabel}</span></div>
-      <div class="ws-queue-actions">
-        <button class="ws-queue-dl" title="Download" onclick="downloadQueueItem(${idx})" ${item.status === 'done' ? '' : 'disabled'}>
-          <i class="ti ti-download" aria-hidden="true"></i>
-        </button>
-        <button class="ws-queue-rm" title="Remove" onclick="removeQueueItem(${idx})">
-          <i class="ti ti-x" aria-hidden="true"></i>
-        </button>
-      </div>`;
+    row.innerHTML =
+      '<img class="ws-queue-thumb" src="' + (item.srcDataUrl || '') + '" alt="">' +
+      '<div class="ws-queue-info">' +
+        '<div class="ws-queue-name" title="' + item.name + '">' + item.name + '</div>' +
+        '<div class="ws-queue-meta">\u2192 ' + outName + '</div>' +
+      '</div>' +
+      '<div class="ws-queue-status"><span class="ws-status-badge ' + item.status + '">' + statusLabel + '</span></div>' +
+      '<div class="ws-queue-actions">' +
+        '<button class="ws-queue-dl" title="Download" onclick="downloadQueueItem(' + idx + ')" ' + (item.status === 'done' ? '' : 'disabled') + '><i class="ti ti-download" aria-hidden="true"></i></button>' +
+        '<button class="ws-queue-rm" title="Remove" onclick="removeQueueItem(' + idx + ')"><i class="ti ti-x" aria-hidden="true"></i></button>' +
+      '</div>';
     list.appendChild(row);
   });
 }
 
 function removeQueueItem(idx) {
-  URL.revokeObjectURL(queue[idx].objectUrl);
   queue.splice(idx, 1);
   renderQueue();
   updateBulkButtons();
+  refreshPreview();
 }
 
 function clearQueue() {
-  queue.forEach(i => URL.revokeObjectURL(i.objectUrl));
   queue = [];
   renderQueue();
   updateBulkButtons();
+  refreshPreview();
 }
 
 function updateBulkButtons() {
@@ -842,54 +922,35 @@ async function processAll() {
   const label = document.getElementById('progressLabel');
   const pct = document.getElementById('progressPct');
   wrap.style.display = 'block';
-
   document.getElementById('btnProcess').disabled = true;
 
+  const tmp = document.createElement('canvas');
+  let processed = 0;
   for (let i = 0; i < queue.length; i++) {
     const item = queue[i];
-    if (item.status === 'done') continue;
-
+    if (!item.srcImg) { item.status = 'error'; processed++; continue; }
     item.status = 'processing';
     renderQueue();
-
+    await new Promise(r => setTimeout(r, 10)); // let UI paint
     try {
-      item.dataUrl = await applyWatermarkToFile(item);
+      drawWatermarked(item.srcImg, tmp);
+      item.dataUrl = tmp.toDataURL(getMimeFromExt(item.ext), 0.92);
       item.status = 'done';
-    } catch(e) {
+    } catch (err) {
       item.status = 'error';
     }
-
-    const p = Math.round(((i + 1) / queue.length) * 100);
+    processed++;
+    const p = Math.round((processed / queue.length) * 100);
     fill.style.width = p + '%';
-    label.textContent = `${i + 1} of ${queue.length} done`;
+    label.textContent = `${processed} of ${queue.length} done`;
     pct.textContent = p + '%';
     renderQueue();
   }
-
   document.getElementById('btnProcess').disabled = false;
   updateBulkButtons();
 }
 
-function applyWatermarkToFile(item) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth;
-      c.height = img.naturalHeight;
-      const cx = c.getContext('2d');
-      cx.drawImage(img, 0, 0);
-      applyWatermarkToCtx(cx, c.width, c.height);
-      const mime = getMimeFromExt(item.ext);
-      resolve(c.toDataURL(mime, 0.92));
-      URL.revokeObjectURL(img.src);
-    };
-    img.onerror = reject;
-    img.src = item.objectUrl;
-  });
-}
-
-/* ── Download helpers ────────────────────── */
+/* ── Downloads ───────────────────────────── */
 function downloadQueueItem(idx) {
   const item = queue[idx];
   if (!item || item.status !== 'done' || !item.dataUrl) return;
@@ -902,14 +963,12 @@ function downloadQueueItem(idx) {
 async function downloadAll() {
   const done = queue.filter(i => i.status === 'done');
   if (done.length === 0) return;
-  // Download one by one with slight delay to avoid browser blocking
-  for (let i = 0; i < done.length; i++) {
-    const item = done[i];
+  for (const item of done) {
     const link = document.createElement('a');
     link.download = `${item.base}-watermark.${item.ext}`;
     link.href = item.dataUrl;
     link.click();
-    await new Promise(r => setTimeout(r, 250));
+    await new Promise(r => setTimeout(r, 300));
   }
 }
 </script>

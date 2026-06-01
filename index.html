@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watermark Studio</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap">
+<style>
+:root {
+  --ws-bg:         #0d0c0a;
+  --ws-surface:    #151310;
+  --ws-card:       #1c1a16;
+  --ws-card-hi:    #222018;
+  --ws-bdr:        #2a2720;
+  --ws-bdr-dim:    #201e1a;
+  --ws-text:       #f0ebe4;
+  --ws-muted:      #7a7268;
+  --ws-dim:        #453f38;
+  --ws-amber:      #c8913a;
+  --ws-amber-hi:   #dba04c;
+  --ws-amber-bg:   #1b1508;
+  --ws-amber-text: #e8b96e;
+  --ws-green:      #3a7a4a;
+  --ws-green-bg:   #0d1f10;
+  --ws-green-text: #6ec882;
+  --ws-red-bg:     #1f0d0d;
+  --ws-red-text:   #e87a7a;
+  --ws-r-sm:  6px;
+  --ws-r-md: 10px;
+  --ws-r-lg: 16px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button, input, select, textarea { font: inherit; border: none; outline: none; -webkit-appearance: none; appearance: none; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--ws-amber); outline-offset: 2px;
+}
+html, body { height: 100%; }
+body {
+  min-height: 100dvh;
+  background: var(--ws-bg);
+  color: var(--ws-text);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.ws { display: flex; flex-direction: column; min-height: 100dvh; }
+
+/* Header */
+.ws-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 18px 16px 0;
+}
+.ws-logo { display: flex; align-items: center; gap: 11px; }
+.ws-logo-icon {
+  width: 36px; height: 36px; flex-shrink: 0;
+  border-radius: var(--ws-r-sm);
+  background: var(--ws-amber-bg); border: 0.5px solid var(--ws-amber);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--ws-amber);
+}
+.ws-logo-name {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.02em; color: var(--ws-text); line-height: 1.15;
+}
+.ws-logo-sub { font-size: 11px; font-weight: 300; color: var(--ws-muted); letter-spacing: 0.01em; }
+.ws-badge {
+  font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ws-amber-text); background: var(--ws-amber-bg);
+  border: 0.5px solid rgba(200,145,58,0.35); border-radius: 100px; padding: 4px 10px; flex-shrink: 0;
+}
+
+/* Body */
+.ws-body {
+  display: flex; flex-direction: column; flex: 1;
+  padding: 12px 16px 32px; gap: 10px;
+}
+
+/* Mode switcher */
+.ws-mode-bar {
+  display: flex; gap: 6px;
+  background: var(--ws-card); border: 0.5px solid var(--ws-bdr);
+  border-radius: var(--ws-r-md); padding: 6px;
+}
+.ws-mode-btn {
+  flex: 1; min-height: 38px; padding: 8px 12px;
+  font-size: 12px; font-weight: 500;
+  background: transparent; color: var(--ws-muted);
+  border: 0.5px solid transparent; border-radius: var(--ws-r-sm);
+  text-align: center; letter-spacing: 0.02em; transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.ws-mode-btn:hover { color: var(--ws-text); }
+.ws-mode-btn.active { background: var(--ws-amber-bg); color: var(--ws-amber-text); border-color: rgba(200,145,58,0.3); }
+
+/* Canvas / drop zone */
+.ws-drop-zone {
+  width: 100%; aspect-ratio: 4/3;
+  background: var(--ws-card); border: 1px dashed var(--ws-bdr);
+  border-radius: var(--ws-r-lg);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative; cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.ws-drop-zone:hover { border-color: var(--ws-amber); background: var(--ws-card-hi); }
+.ws-drop-zone.drag-over { border-color: var(--ws-amber); border-style: solid; background: var(--ws-amber-bg); }
+.ws-drop-zone canvas { max-width: 100%; max-height: 100%; display: block; }
+.ws-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 24px 16px; pointer-events: none; user-select: none; text-align: center;
+}
+.ws-empty-icon {
+  width: 60px; height: 60px; border-radius: var(--ws-r-md);
+  background: var(--ws-amber-bg); border: 0.5px solid var(--ws-bdr);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; color: var(--ws-amber); margin-bottom: 6px; transition: transform 0.25s;
+}
+.ws-drop-zone:hover .ws-empty-icon { transform: translateY(-3px); }
+.ws-empty-label { font-size: 14px; font-weight: 500; color: var(--ws-text); }
+.ws-empty-sub { font-size: 12px; font-weight: 300; color: var(--ws-muted); }
+.ws-fmt-row { display: flex; gap: 5px; margin-top: 6px; }
+.ws-fmt {
+  font-size: 10px; font-weight: 500; letter-spacing: 0.06em;
+  color: var(--ws-dim); border: 0.5px solid var(--ws-bdr-dim);
+  border-radius: 4px; padding: 2px 8px;
+}
+
+/* Action buttons */
+.ws-actions { display: flex; gap: 8px; }
+.ws-btn-load {
+  flex: 1; min-height: 48px; padding: 12px 16px;
+  background: var(--ws-card); border: 0.5px solid var(--ws-bdr);
+  border-radius: var(--ws-r-md); color: var(--ws-text);
+  font-size: 13px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.ws-btn-load:hover { background: var(--ws-card-hi); }
+.ws-btn-load:active { transform: scale(0.98); }
+.ws-btn-export {
+  flex: 1; min-height: 48px; padding: 12px 16px;
+  background: var(--ws-amber); border: none; border-radius: var(--ws-r-md);
+  color: #0d0c0a; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+.ws-btn-export:hover { background: var(--ws-amber-hi); }
+.ws-btn-export:active { transform: scale(0.98); }
+.ws-btn-export:disabled { opacity: 0.3; pointer-events: none; }
+
+/* Controls */
+.ws-controls { display: flex; flex-direction: column; gap: 10px; }
+
+/* Card */
+.ws-card { background: var(--ws-card); border: 0.5px solid var(--ws-bdr); border-radius: var(--ws-r-lg); overflow: hidden; }
+.ws-card-head {
+  padding: 11px 14px; font-size: 10px; font-weight: 500;
+  letter-spacing: 0.10em; text-transform: uppercase; color: var(--ws-muted);
+  border-bottom: 0.5px solid var(--ws-bdr-dim);
+}
+.ws-card-body { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Tabs */
+.ws-tabs { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 0.5px solid var(--ws-bdr-dim); }
+.ws-tab {
+  flex: 1; min-height: 40px; padding: 8px 12px;
+  font-size: 12px; font-weight: 500;
+  background: transparent; color: var(--ws-muted);
+  border: 0.5px solid transparent; border-radius: var(--ws-r-sm);
+  text-align: center; letter-spacing: 0.02em; transition: all 0.15s;
+}
+.ws-tab:hover { color: var(--ws-text); }
+.ws-tab.active { background: var(--ws-amber-bg); color: var(--ws-amber-text); border-color: rgba(200,145,58,0.3); }
+
+/* Fields */
+.ws-field label {
+  display: block; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--ws-muted); margin-bottom: 7px;
+}
+.ws-field input[type="text"], .ws-field textarea, .ws-field select {
+  width: 100%; background: var(--ws-surface);
+  border: 0.5px solid var(--ws-bdr); border-radius: var(--ws-r-sm);
+  color: var(--ws-text); font-size: 13px; padding: 10px 12px; transition: border-color 0.15s;
+}
+.ws-field input[type="text"]:focus, .ws-field textarea:focus, .ws-field select:focus { border-color: var(--ws-amber); }
+.ws-field select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%237a7268' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; cursor: pointer;
+}
+.ws-field textarea { resize: vertical; min-height: 62px; font-family: inherit; line-height: 1.5; }
+.ws-field input[type="color"] {
+  width: 100%; height: 44px; background: var(--ws-surface);
+  border: 0.5px solid var(--ws-bdr); border-radius: var(--ws-r-sm);
+  padding: 4px 6px; cursor: pointer; transition: border-color 0.15s;
+}
+.ws-field input[type="color"]:focus { border-color: var(--ws-amber); }
+.ws-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* Sliders */
+.ws-slider-row { display: flex; align-items: center; gap: 12px; }
+.ws-slider-row input[type="range"] {
+  flex: 1; height: 4px; background: var(--ws-bdr); border-radius: 100px; cursor: pointer;
+}
+.ws-slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 22px; height: 22px;
+  background: var(--ws-amber); border-radius: 50%; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5); transition: transform 0.12s, background 0.12s;
+}
+.ws-slider-row input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.18); background: var(--ws-amber-hi); }
+.ws-slider-row input[type="range"]::-moz-range-thumb {
+  width: 22px; height: 22px; background: var(--ws-amber);
+  border: none; border-radius: 50%; cursor: pointer;
+}
+.ws-slider-val {
+  font-size: 12px; font-weight: 500; color: var(--ws-amber-text);
+  min-width: 40px; text-align: right; font-variant-numeric: tabular-nums;
+}
+
+/* Position grid */
+.ws-pos-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+.ws-pos-btn {
+  aspect-ratio: 1; min-height: 44px;
+  background: var(--ws-surface); border: 0.5px solid var(--ws-bdr);
+  border-radius: var(--ws-r-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; color: var(--ws-dim); transition: all 0.12s;
+}
+.ws-pos-btn:hover { border-color: var(--ws-muted); color: var(--ws-muted); background: var(--ws-card-hi); }
+.ws-pos-btn.active { background: var(--ws-amber-bg); border-color: var(--ws-amber); color: var(--ws-amber); }
+
+/* Upload row */
+.ws-upload-row { display: flex; align-items: center; gap: 10px; }
+.ws-btn-upload {
+  flex-shrink: 0; min-height: 44px; padding: 10px 14px;
+  background: var(--ws-surface); border: 0.5px solid var(--ws-bdr);
+  border-radius: var(--ws-r-sm); color: var(--ws-text);
+  font-size: 12px; font-weight: 500;
+  display: flex; align-items: center; gap: 7px; transition: border-color 0.15s;
+}
+.ws-btn-upload:hover { border-color: var(--ws-amber); }
+.ws-filename {
+  font-size: 11px; font-weight: 300; color: var(--ws-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+
+/* Bulk queue */
+.ws-queue { display: flex; flex-direction: column; gap: 0; }
+.ws-queue-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-bottom: 0.5px solid var(--ws-bdr-dim);
+  transition: background 0.12s;
+}
+.ws-queue-item:last-child { border-bottom: none; }
+.ws-queue-item:hover { background: var(--ws-card-hi); }
+.ws-queue-thumb {
+  width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: var(--ws-r-sm); object-fit: cover;
+  border: 0.5px solid var(--ws-bdr);
+}
+.ws-queue-info { flex: 1; min-width: 0; }
+.ws-queue-name {
+  font-size: 12px; font-weight: 500; color: var(--ws-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ws-queue-meta { font-size: 11px; color: var(--ws-muted); margin-top: 2px; }
+.ws-queue-status { flex-shrink: 0; }
+.ws-status-badge {
+  font-size: 10px; font-weight: 500; letter-spacing: 0.05em;
+  padding: 3px 8px; border-radius: 100px;
+}
+.ws-status-badge.pending { color: var(--ws-muted); background: var(--ws-surface); border: 0.5px solid var(--ws-bdr); }
+.ws-status-badge.processing { color: var(--ws-amber-text); background: var(--ws-amber-bg); border: 0.5px solid rgba(200,145,58,0.3); }
+.ws-status-badge.done { color: var(--ws-green-text); background: var(--ws-green-bg); border: 0.5px solid rgba(58,122,74,0.4); }
+.ws-status-badge.error { color: var(--ws-red-text); background: var(--ws-red-bg); border: 0.5px solid rgba(232,122,122,0.3); }
+.ws-queue-actions { display: flex; gap: 6px; }
+.ws-queue-dl {
+  width: 32px; height: 32px; border-radius: var(--ws-r-sm);
+  background: var(--ws-amber); border: none; color: #0d0c0a;
+  display: flex; align-items: center; justify-content: center; font-size: 15px;
+  transition: background 0.12s, transform 0.1s; flex-shrink: 0;
+}
+.ws-queue-dl:hover { background: var(--ws-amber-hi); }
+.ws-queue-dl:active { transform: scale(0.95); }
+.ws-queue-dl:disabled { opacity: 0.25; pointer-events: none; }
+.ws-queue-rm {
+  width: 32px; height: 32px; border-radius: var(--ws-r-sm);
+  background: var(--ws-surface); border: 0.5px solid var(--ws-bdr);
+  color: var(--ws-muted); display: flex; align-items: center; justify-content: center;
+  font-size: 15px; transition: border-color 0.12s, color 0.12s;
+}
+.ws-queue-rm:hover { border-color: var(--ws-red-text); color: var(--ws-red-text); }
+
+/* Progress bar */
+.ws-progress-wrap {
+  padding: 10px 14px; border-top: 0.5px solid var(--ws-bdr-dim);
+  display: none;
+}
+.ws-progress-label {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--ws-muted); margin-bottom: 6px;
+}
+.ws-progress-track {
+  height: 4px; background: var(--ws-bdr); border-radius: 100px; overflow: hidden;
+}
+.ws-progress-fill {
+  height: 100%; background: var(--ws-amber); border-radius: 100px;
+  transition: width 0.2s; width: 0%;
+}
+
+/* Bulk actions row */
+.ws-bulk-row {
+  display: flex; gap: 8px; padding: 10px 14px;
+  border-top: 0.5px solid var(--ws-bdr-dim);
+}
+.ws-btn-bulk-process {
+  flex: 1; min-height: 40px; padding: 8px 12px;
+  background: var(--ws-amber); border: none; border-radius: var(--ws-r-sm);
+  color: #0d0c0a; font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+.ws-btn-bulk-process:hover { background: var(--ws-amber-hi); }
+.ws-btn-bulk-process:active { transform: scale(0.98); }
+.ws-btn-bulk-process:disabled { opacity: 0.3; pointer-events: none; }
+.ws-btn-bulk-dl {
+  flex: 1; min-height: 40px; padding: 8px 12px;
+  background: var(--ws-surface); border: 0.5px solid var(--ws-bdr);
+  border-radius: var(--ws-r-sm); color: var(--ws-text);
+  font-size: 12px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ws-btn-bulk-dl:hover { background: var(--ws-card-hi); border-color: var(--ws-muted); }
+.ws-btn-bulk-dl:disabled { opacity: 0.3; pointer-events: none; }
+
+/* Empty queue */
+.ws-queue-empty {
+  padding: 24px 14px; text-align: center;
+  font-size: 12px; color: var(--ws-muted);
+}
+
+/* Hidden */
+#fileInput, #bulkInput, #wmImgInput { display: none; }
+
+/* Desktop */
+@media (min-width: 720px) {
+  .ws-header { padding: 22px 24px 0; }
+  .ws-body { flex-direction: row; align-items: flex-start; padding: 14px 24px 32px; gap: 16px; }
+  .ws-canvas-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 14px; }
+  .ws-controls { width: 280px; flex-shrink: 0; }
+}
+@media (min-width: 1024px) { .ws-controls { width: 300px; } }
+</style>
+</head>
+<body>
+<div class="ws">
+  <header class="ws-header">
+    <div class="ws-logo">
+      <div class="ws-logo-icon"><i class="ti ti-droplet-half-2" aria-hidden="true"></i></div>
+      <div>
+        <div class="ws-logo-name">M&M Watermark App</div>
+        <div class="ws-logo-sub">Made with love, exclusively for my beloved <b>Marjorie B.</b></div>
+      </div>
+    </div>
+    <span class="ws-badge">Personal use</span>
+  </header>
+
+  <div class="ws-body">
+    <!-- Left: canvas + actions -->
+    <div class="ws-canvas-col">
+
+      <!-- Mode switch -->
+      <div class="ws-mode-bar">
+        <button class="ws-mode-btn active" id="modeSingle" onclick="switchAppMode('single',this)">
+          <i class="ti ti-photo" aria-hidden="true"></i> Single image
+        </button>
+        <button class="ws-mode-btn" id="modeBulk" onclick="switchAppMode('bulk',this)">
+          <i class="ti ti-stack-2" aria-hidden="true"></i> Bulk
+        </button>
+      </div>
+
+      <!-- Single mode canvas -->
+      <div id="singleView">
+        <div class="ws-drop-zone" id="dropZone">
+          <div class="ws-empty" id="dropHint">
+            <div class="ws-empty-icon"><i class="ti ti-photo-up" aria-hidden="true"></i></div>
+            <div class="ws-empty-label">Drop your image here</div>
+            <div class="ws-empty-sub">or tap to browse files</div>
+            <div class="ws-fmt-row">
+              <span class="ws-fmt">JPG</span><span class="ws-fmt">PNG</span><span class="ws-fmt">WEBP</span>
+            </div>
+          </div>
+          <canvas id="canvas" style="display:none"></canvas>
+        </div>
+        <div class="ws-actions" style="margin-top:10px">
+          <button class="ws-btn-load" onclick="document.getElementById('fileInput').click()">
+            <i class="ti ti-folder-open" aria-hidden="true"></i> Load image
+          </button>
+          <button class="ws-btn-export" id="downloadBtn" onclick="downloadSingle()" disabled>
+            <i class="ti ti-download" aria-hidden="true"></i> Export
+          </button>
+        </div>
+      </div>
+
+      <!-- Bulk mode queue -->
+      <div id="bulkView" style="display:none">
+        <div class="ws-card">
+          <div class="ws-card-head" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Image queue</span>
+            <span id="queueCount" style="font-size:11px;color:var(--ws-amber-text)">0 images</span>
+          </div>
+          <div class="ws-queue" id="queueList">
+            <div class="ws-queue-empty" id="queueEmpty">
+              <i class="ti ti-stack-2" style="font-size:28px;color:var(--ws-dim);display:block;margin-bottom:6px" aria-hidden="true"></i>
+              No images yet — add some below
+            </div>
+          </div>
+          <div class="ws-progress-wrap" id="progressWrap">
+            <div class="ws-progress-label">
+              <span id="progressLabel">Processing…</span>
+              <span id="progressPct">0%</span>
+            </div>
+            <div class="ws-progress-track"><div class="ws-progress-fill" id="progressFill"></div></div>
+          </div>
+          <div class="ws-bulk-row">
+            <button class="ws-btn-bulk-process" id="btnProcess" onclick="processAll()" disabled>
+              <i class="ti ti-wand" aria-hidden="true"></i> Apply watermarks
+            </button>
+            <button class="ws-btn-bulk-dl" id="btnDlAll" onclick="downloadAll()" disabled>
+              <i class="ti ti-download" aria-hidden="true"></i> Download all
+            </button>
+          </div>
+        </div>
+        <div class="ws-actions" style="margin-top:8px">
+          <button class="ws-btn-load" onclick="document.getElementById('bulkInput').click()">
+            <i class="ti ti-plus" aria-hidden="true"></i> Add images
+          </button>
+          <button class="ws-btn-load" onclick="clearQueue()" style="flex:0;padding:12px 16px">
+            <i class="ti ti-trash" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right: controls (shared) -->
+    <div class="ws-controls">
+      <div class="ws-card">
+        <div class="ws-tabs">
+          <button class="ws-tab active" onclick="setMode('text',this)">
+            <i class="ti ti-text-size" aria-hidden="true" style="margin-right:5px"></i>Text
+          </button>
+          <button class="ws-tab" onclick="setMode('image',this)">
+            <i class="ti ti-photo" aria-hidden="true" style="margin-right:5px"></i>Logo
+          </button>
+        </div>
+
+        <div class="ws-card-body" id="textPanel">
+          <div class="ws-field">
+            <label>Watermark text</label>
+            <textarea id="wmText" rows="2" placeholder="© Your Name 2025" oninput="render()">© My Work</textarea>
+          </div>
+          <div class="ws-row">
+            <div class="ws-field">
+              <label>Size</label>
+              <select id="fontSize" onchange="render()">
+                <option value="16">Small</option>
+                <option value="24" selected>Medium</option>
+                <option value="36">Large</option>
+                <option value="52">X-Large</option>
+              </select>
+            </div>
+            <div class="ws-field">
+              <label>Color</label>
+              <input type="color" id="wmColor" value="#ffffff" onchange="render()">
+            </div>
+          </div>
+          <div class="ws-field">
+            <label>Style</label>
+            <select id="fontStyle" onchange="render()">
+              <option value="normal">Normal</option>
+              <option value="bold">Bold</option>
+              <option value="italic">Italic</option>
+              <option value="bold italic">Bold Italic</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="ws-card-body" id="imagePanel" style="display:none">
+          <div class="ws-field">
+            <label>Logo file</label>
+            <div class="ws-upload-row">
+              <button class="ws-btn-upload" onclick="document.getElementById('wmImgInput').click()">
+                <i class="ti ti-file-upload" aria-hidden="true"></i> Browse
+              </button>
+              <span class="ws-filename" id="wmImgName">No file chosen</span>
+            </div>
+          </div>
+          <div class="ws-field">
+            <label>Logo size</label>
+            <div class="ws-slider-row">
+              <input type="range" id="wmImgSize" min="5" max="50" value="20" step="1"
+                oninput="updateVal('wmImgSize','wmImgSizeVal','%'); render()">
+              <span class="ws-slider-val" id="wmImgSizeVal">20%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ws-card">
+        <div class="ws-card-head">Position &amp; appearance</div>
+        <div class="ws-card-body">
+          <div class="ws-field">
+            <label>Placement</label>
+            <div class="ws-pos-grid" id="posGrid">
+              <button class="ws-pos-btn" data-pos="tl" onclick="setPos('tl',this)" aria-label="Top left"><i class="ti ti-arrow-up-left" aria-hidden="true"></i></button>
+              <button class="ws-pos-btn" data-pos="tc" onclick="setPos('tc',this)" aria-label="Top center"><i class="ti ti-arrow-up" aria-hidden="true"></i></button>
+              <button class="ws-pos-btn" data-pos="tr" onclick="setPos('tr',this)" aria-label="Top right"><i class="ti ti-arrow-up-right" aria-hidden="true"></i></button>
+              <button class="ws-pos-btn" data-pos="ml" onclick="setPos('ml',this)" aria-label="Middle left"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+              <button class="ws-pos-btn" data-pos="center" onclick="setPos('center',this)" aria-label="Center"><i class="ti ti-focus-centered" aria-hidden="true"></i></button>
+              <button class="ws-pos-btn" data-pos="mr" onclick="setPos('mr',this)" aria-label="Middle right"><i class="ti ti-arrow-right" aria-hidden="true"></i></button>
+              <button class="ws-pos-btn" data-pos="bl" onclick="setPos('bl',this)" aria-label="Bottom left"><i class="ti ti-arrow-down-left" aria-hidden="true"></i></button>
+              <button class="ws-pos-btn" data-pos="bc" onclick="setPos('bc',this)" aria-label="Bottom center"><i class="ti ti-arrow-down" aria-hidden="true"></i></button>
+              <button class="ws-pos-btn active" data-pos="br" onclick="setPos('br',this)" aria-label="Bottom right"><i class="ti ti-arrow-down-right" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <div class="ws-field">
+            <label>Opacity</label>
+            <div class="ws-slider-row">
+              <input type="range" id="opacity" min="5" max="100" value="50" step="1"
+                oninput="updateVal('opacity','opacityVal','%'); render()">
+              <span class="ws-slider-val" id="opacityVal">50%</span>
+            </div>
+          </div>
+          <div class="ws-field">
+            <label>Rotation</label>
+            <div class="ws-slider-row">
+              <input type="range" id="rotation" min="-90" max="90" value="-30" step="1"
+                oninput="updateVal('rotation','rotationVal','°'); render()">
+              <span class="ws-slider-val" id="rotationVal">-30°</span>
+            </div>
+          </div>
+          <div class="ws-field">
+            <label>Repeat</label>
+            <select id="tileMode" onchange="render()">
+              <option value="single">Single placement</option>
+              <option value="tile">Tiled pattern</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*" onchange="loadSingleImage(this)">
+<input type="file" id="bulkInput" accept="image/*" multiple onchange="addToQueue(this)">
+<input type="file" id="wmImgInput" accept="image/*" onchange="loadWmImage(this)">
+
+<script>
+let baseImg = null, wmImg = null, wmMode = 'text', pos = 'br', appMode = 'single';
+let queue = []; // {file, name, ext, mimeType, objectUrl, thumb, dataUrl, status}
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+/* ── App mode switch ─────────────────────── */
+function switchAppMode(m, el) {
+  appMode = m;
+  document.getElementById('singleView').style.display = m === 'single' ? 'block' : 'none';
+  document.getElementById('bulkView').style.display = m === 'bulk' ? 'block' : 'none';
+  document.querySelectorAll('.ws-mode-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+/* ── Drag/drop single ────────────────────── */
+const dz = document.getElementById('dropZone');
+dz.addEventListener('click', e => {
+  if (e.target === dz || e.target.closest('.ws-empty')) document.getElementById('fileInput').click();
+});
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadFromFile(f, true);
+});
+
+/* ── Single image load ───────────────────── */
+function loadSingleImage(inp) { if (inp.files[0]) loadFromFile(inp.files[0], true); }
+
+function loadFromFile(file, isSingle) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    if (isSingle) {
+      baseImg = img;
+      baseImg._file = file;
+      document.getElementById('dropHint').style.display = 'none';
+      canvas.style.display = 'block';
+      document.getElementById('downloadBtn').disabled = false;
+      render();
+    }
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+/* ── Watermark type mode ─────────────────── */
+function setMode(m, el) {
+  wmMode = m;
+  document.getElementById('textPanel').style.display = m === 'text' ? 'flex' : 'none';
+  document.getElementById('imagePanel').style.display = m === 'image' ? 'flex' : 'none';
+  document.querySelectorAll('.ws-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function setPos(p, el) {
+  pos = p;
+  document.querySelectorAll('.ws-pos-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function updateVal(id, outId, suffix) {
+  document.getElementById(outId).textContent = document.getElementById(id).value + suffix;
+}
+
+/* ── Logo watermark image ────────────────── */
+function loadWmImage(inp) {
+  if (!inp.files[0]) return;
+  document.getElementById('wmImgName').textContent = inp.files[0].name;
+  const url = URL.createObjectURL(inp.files[0]);
+  const img = new Image();
+  img.onload = () => { wmImg = img; render(); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+/* ── Canvas render (single preview) ─────── */
+function render() {
+  if (!baseImg) return;
+  canvas.width = baseImg.naturalWidth;
+  canvas.height = baseImg.naturalHeight;
+  ctx.drawImage(baseImg, 0, 0);
+  applyWatermarkToCtx(ctx, canvas.width, canvas.height);
+}
+
+function applyWatermarkToCtx(c, w, h) {
+  const opacity = parseInt(document.getElementById('opacity').value) / 100;
+  const rot = parseInt(document.getElementById('rotation').value) * Math.PI / 180;
+  const tile = document.getElementById('tileMode').value;
+  c.save();
+  c.globalAlpha = opacity;
+  if (wmMode === 'text') drawText(c, w, h, tile, rot);
+  else if (wmMode === 'image' && wmImg) drawImg(c, w, h, tile, rot);
+  c.restore();
+}
+
+/* ── Draw helpers ────────────────────────── */
+function getAnchor(cw, ch, w, h, padX, padY) {
+  switch(pos) {
+    case 'tl': return [padX + w/2, padY + h/2];
+    case 'tc': return [cw/2, padY + h/2];
+    case 'tr': return [cw - padX - w/2, padY + h/2];
+    case 'ml': return [padX + w/2, ch/2];
+    case 'center': return [cw/2, ch/2];
+    case 'mr': return [cw - padX - w/2, ch/2];
+    case 'bl': return [padX + w/2, ch - padY - h/2];
+    case 'bc': return [cw/2, ch - padY - h/2];
+    default:   return [cw - padX - w/2, ch - padY - h/2];
+  }
+}
+
+function drawText(c, cw, ch, tile, rot) {
+  const text = document.getElementById('wmText').value || '© Watermark';
+  const size = parseInt(document.getElementById('fontSize').value);
+  const color = document.getElementById('wmColor').value;
+  const style = document.getElementById('fontStyle').value;
+  const scaledSize = Math.round(size * (cw / 600));
+  c.font = `${style} ${scaledSize}px sans-serif`;
+  c.fillStyle = color;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  const w = c.measureText(text).width;
+  const h = scaledSize * 1.4;
+  const pad = scaledSize * 1.5;
+  if (tile === 'tile') {
+    const stepX = w * 2.5, stepY = h * 3;
+    for (let y = -stepY; y < ch + stepY; y += stepY) {
+      for (let x = -stepX; x < cw + stepX; x += stepX) {
+        c.save();
+        c.translate(x + (Math.floor(y/stepY) % 2 === 0 ? 0 : stepX/2), y);
+        c.rotate(rot); c.fillText(text, 0, 0); c.restore();
+      }
+    }
+  } else {
+    const [ax, ay] = getAnchor(cw, ch, w, h, pad, pad);
+    c.save(); c.translate(ax, ay); c.rotate(rot); c.fillText(text, 0, 0); c.restore();
+  }
+}
+
+function drawImg(c, cw, ch, tile, rot) {
+  const sizePct = parseInt(document.getElementById('wmImgSize').value) / 100;
+  const wmW = Math.round(cw * sizePct);
+  const wmH = Math.round(wmW * wmImg.height / wmImg.width);
+  const pad = wmW * 0.3;
+  if (tile === 'tile') {
+    const stepX = wmW * 2.5, stepY = wmH * 2.5;
+    for (let y = -stepY; y < ch + stepY; y += stepY) {
+      for (let x = -stepX; x < cw + stepX; x += stepX) {
+        c.save();
+        c.translate(x + (Math.floor(y/stepY) % 2 === 0 ? 0 : stepX/2), y);
+        c.rotate(rot); c.drawImage(wmImg, -wmW/2, -wmH/2, wmW, wmH); c.restore();
+      }
+    }
+  } else {
+    const [ax, ay] = getAnchor(cw, ch, wmW, wmH, pad, pad);
+    c.save(); c.translate(ax, ay); c.rotate(rot); c.drawImage(wmImg, -wmW/2, -wmH/2, wmW, wmH); c.restore();
+  }
+}
+
+/* ── Single export ───────────────────────── */
+function getOutputFilename(originalName, mimeType) {
+  const dot = originalName.lastIndexOf('.');
+  let base, ext;
+  if (dot > 0) {
+    base = originalName.substring(0, dot);
+    ext = originalName.substring(dot + 1).toLowerCase();
+  } else {
+    base = originalName;
+    ext = 'png';
+  }
+  // Normalise jpeg -> jpg
+  if (ext === 'jpeg') ext = 'jpg';
+  return `${base}-watermark.${ext}`;
+}
+
+function getMimeFromExt(ext) {
+  const map = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+  return map[ext] || 'image/png';
+}
+
+function downloadSingle() {
+  if (!baseImg) return;
+  const file = baseImg._file;
+  const filename = file ? getOutputFilename(file.name, file.type) : 'image-watermark.png';
+  const dot = filename.lastIndexOf('.');
+  const ext = dot > 0 ? filename.substring(dot + 1) : 'png';
+  const mime = getMimeFromExt(ext);
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = canvas.toDataURL(mime, 0.92);
+  link.click();
+}
+
+/* ── Bulk queue ──────────────────────────── */
+function addToQueue(inp) {
+  const files = Array.from(inp.files);
+  files.forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const dot = file.name.lastIndexOf('.');
+    const base = dot > 0 ? file.name.substring(0, dot) : file.name;
+    let ext = dot > 0 ? file.name.substring(dot + 1).toLowerCase() : 'png';
+    if (ext === 'jpeg') ext = 'jpg';
+    const item = { file, name: file.name, base, ext, mimeType: file.type, objectUrl: URL.createObjectURL(file), thumb: null, dataUrl: null, status: 'pending' };
+    queue.push(item);
+  });
+  inp.value = '';
+  renderQueue();
+  updateBulkButtons();
+}
+
+function renderQueue() {
+  const list = document.getElementById('queueList');
+  const empty = document.getElementById('queueEmpty');
+  document.getElementById('queueCount').textContent = `${queue.length} image${queue.length !== 1 ? 's' : ''}`;
+  if (queue.length === 0) {
+    list.innerHTML = '';
+    list.appendChild(empty);
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  // Re-render all items
+  list.innerHTML = '';
+  queue.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'ws-queue-item';
+    row.id = `qi-${idx}`;
+
+    const thumbSrc = item.thumb || item.objectUrl;
+    const statusClass = item.status;
+    const statusLabel = { pending: 'Pending', processing: 'Processing…', done: 'Done', error: 'Error' }[item.status] || item.status;
+    const outName = `${item.base}-watermark.${item.ext}`;
+
+    row.innerHTML = `
+      <img class="ws-queue-thumb" src="${thumbSrc}" alt="">
+      <div class="ws-queue-info">
+        <div class="ws-queue-name" title="${item.name}">${item.name}</div>
+        <div class="ws-queue-meta">→ ${outName}</div>
+      </div>
+      <div class="ws-queue-status"><span class="ws-status-badge ${statusClass}">${statusLabel}</span></div>
+      <div class="ws-queue-actions">
+        <button class="ws-queue-dl" title="Download" onclick="downloadQueueItem(${idx})" ${item.status === 'done' ? '' : 'disabled'}>
+          <i class="ti ti-download" aria-hidden="true"></i>
+        </button>
+        <button class="ws-queue-rm" title="Remove" onclick="removeQueueItem(${idx})">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
+function removeQueueItem(idx) {
+  URL.revokeObjectURL(queue[idx].objectUrl);
+  queue.splice(idx, 1);
+  renderQueue();
+  updateBulkButtons();
+}
+
+function clearQueue() {
+  queue.forEach(i => URL.revokeObjectURL(i.objectUrl));
+  queue = [];
+  renderQueue();
+  updateBulkButtons();
+}
+
+function updateBulkButtons() {
+  document.getElementById('btnProcess').disabled = queue.length === 0;
+  document.getElementById('btnDlAll').disabled = !queue.some(i => i.status === 'done');
+}
+
+/* ── Process all ─────────────────────────── */
+async function processAll() {
+  if (queue.length === 0) return;
+  const wrap = document.getElementById('progressWrap');
+  const fill = document.getElementById('progressFill');
+  const label = document.getElementById('progressLabel');
+  const pct = document.getElementById('progressPct');
+  wrap.style.display = 'block';
+
+  document.getElementById('btnProcess').disabled = true;
+
+  for (let i = 0; i < queue.length; i++) {
+    const item = queue[i];
+    if (item.status === 'done') continue;
+
+    item.status = 'processing';
+    renderQueue();
+
+    try {
+      item.dataUrl = await applyWatermarkToFile(item);
+      item.status = 'done';
+    } catch(e) {
+      item.status = 'error';
+    }
+
+    const p = Math.round(((i + 1) / queue.length) * 100);
+    fill.style.width = p + '%';
+    label.textContent = `${i + 1} of ${queue.length} done`;
+    pct.textContent = p + '%';
+    renderQueue();
+  }
+
+  document.getElementById('btnProcess').disabled = false;
+  updateBulkButtons();
+}
+
+function applyWatermarkToFile(item) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const cx = c.getContext('2d');
+      cx.drawImage(img, 0, 0);
+      applyWatermarkToCtx(cx, c.width, c.height);
+      const mime = getMimeFromExt(item.ext);
+      resolve(c.toDataURL(mime, 0.92));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = reject;
+    img.src = item.objectUrl;
+  });
+}
+
+/* ── Download helpers ────────────────────── */
+function downloadQueueItem(idx) {
+  const item = queue[idx];
+  if (!item || item.status !== 'done' || !item.dataUrl) return;
+  const link = document.createElement('a');
+  link.download = `${item.base}-watermark.${item.ext}`;
+  link.href = item.dataUrl;
+  link.click();
+}
+
+async function downloadAll() {
+  const done = queue.filter(i => i.status === 'done');
+  if (done.length === 0) return;
+  // Download one by one with slight delay to avoid browser blocking
+  for (let i = 0; i < done.length; i++) {
+    const item = done[i];
+    const link = document.createElement('a');
+    link.download = `${item.base}-watermark.${item.ext}`;
+    link.href = item.dataUrl;
+    link.click();
+    await new Promise(r => setTimeout(r, 250));
+  }
+}
+</script>
+</body>
+</html>

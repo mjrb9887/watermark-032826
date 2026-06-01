@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Watermark Studio</title>
+<title>M&M Watermark App</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap">
@@ -353,6 +353,7 @@ body {
 }
 @media (min-width: 1024px) { .ws-controls { width: 300px; } }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 <div class="ws">
@@ -360,8 +361,8 @@ body {
     <div class="ws-logo">
       <div class="ws-logo-icon"><i class="ti ti-droplet-half-2" aria-hidden="true"></i></div>
       <div>
-        <div class="ws-logo-name">Watermark Studio</div>
-        <div class="ws-logo-sub">Add text &amp; image watermarks</div>
+        <div class="ws-logo-name">M&M Watermark App</div>
+        <div class="ws-logo-sub">Made with love, exclusively for my beloved <b>Marjorie B.</b></div>
       </div>
     </div>
     <span class="ws-badge">Personal use</span>
@@ -578,7 +579,7 @@ let wmImg = null;          // logo watermark image (decoded)
 let wmMode = 'text';       // 'text' | 'image'
 let pos = 'br';
 let appMode = 'single';    // 'single' | 'bulk'
-let queue = [];            // {name, base, ext, srcDataUrl, srcImg, dataUrl, status}
+let queue = [];            // {name, base, ext, srcDataUrl, srcImg, blob, status}
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -819,16 +820,90 @@ function drawBulkPreview() {
   imgEl.src = tmp.toDataURL('image/jpeg', 0.85);
 }
 
+/* ── Robust download helper ──────────────── */
+/* Appends the anchor to the DOM (required by Firefox & some mobile
+   browsers) and uses a Blob object URL (handles large images that
+   would fail as giant data URLs). */
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* Promisified canvas -> Blob (with data-URL fallback for old browsers) */
+function canvasToBlob(cnv, mime, quality) {
+  return new Promise((resolve) => {
+    if (cnv.toBlob) {
+      cnv.toBlob(b => {
+        if (b) { resolve(b); return; }
+        resolve(dataURLtoBlob(cnv.toDataURL(mime, quality)));
+      }, mime, quality);
+    } else {
+      resolve(dataURLtoBlob(cnv.toDataURL(mime, quality)));
+    }
+  });
+}
+
+function dataURLtoBlob(dataUrl) {
+  const parts = dataUrl.split(',');
+  const mime = parts[0].match(/:(.*?);/)[1];
+  const bin = atob(parts[1]);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+/* ── Mobile / share detection ────────────── */
+const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+
+function canShareFiles(files) {
+  return !!(navigator.canShare && navigator.canShare({ files }));
+}
+
+/* Try to hand image files to the OS share sheet.
+   On iOS this surfaces "Save N Images" -> saves to Photos.
+   Returns true if the share sheet handled it (or user cancelled),
+   false if sharing isn't available so the caller can fall back. */
+async function shareFiles(files, title) {
+  if (!canShareFiles(files)) return false;
+  try {
+    await navigator.share({ files, title: title || 'Watermarked images' });
+    return true;
+  } catch (e) {
+    if (e && e.name === 'AbortError') return true; // user cancelled — don't fall back
+    return false;
+  }
+}
+
+function makeFile(blob, filename) {
+  try {
+    return new File([blob], filename, { type: blob.type });
+  } catch (e) {
+    return null; // very old browsers without File constructor
+  }
+}
+
 /* ── Single export ───────────────────────── */
-function downloadSingle() {
+async function downloadSingle() {
   if (!baseImg) return;
   drawWatermarked(baseImg, canvas);
   const ext = baseFileMeta ? baseFileMeta.ext : 'png';
   const base = baseFileMeta ? baseFileMeta.base : 'image';
-  const link = document.createElement('a');
-  link.download = `${base}-watermark.${ext}`;
-  link.href = canvas.toDataURL(getMimeFromExt(ext), 0.92);
-  link.click();
+  const filename = `${base}-watermark.${ext}`;
+  const blob = await canvasToBlob(canvas, getMimeFromExt(ext), 0.92);
+
+  // On mobile, prefer the share sheet so the image can go to Photos.
+  if (IS_MOBILE) {
+    const file = makeFile(blob, filename);
+    if (file && await shareFiles([file], 'Watermarked image')) return;
+  }
+  triggerDownload(blob, filename);
 }
 
 /* ── Bulk queue ──────────────────────────── */
@@ -839,7 +914,7 @@ function addToQueue(inp) {
   let remaining = files.length;
   files.forEach(file => {
     const { base, ext } = splitName(file.name);
-    const item = { name: file.name, base, ext, srcDataUrl: null, srcImg: null, dataUrl: null, status: 'pending' };
+    const item = { name: file.name, base, ext, srcDataUrl: null, srcImg: null, blob: null, status: 'pending' };
     queue.push(item);
     const reader = new FileReader();
     reader.onload = e => {
@@ -934,7 +1009,7 @@ async function processAll() {
     await new Promise(r => setTimeout(r, 10)); // let UI paint
     try {
       drawWatermarked(item.srcImg, tmp);
-      item.dataUrl = tmp.toDataURL(getMimeFromExt(item.ext), 0.92);
+      item.blob = await canvasToBlob(tmp, getMimeFromExt(item.ext), 0.92);
       item.status = 'done';
     } catch (err) {
       item.status = 'error';
@@ -951,26 +1026,96 @@ async function processAll() {
 }
 
 /* ── Downloads ───────────────────────────── */
-function downloadQueueItem(idx) {
+async function downloadQueueItem(idx) {
   const item = queue[idx];
-  if (!item || item.status !== 'done' || !item.dataUrl) return;
-  const link = document.createElement('a');
-  link.download = `${item.base}-watermark.${item.ext}`;
-  link.href = item.dataUrl;
-  link.click();
+  if (!item || item.status !== 'done' || !item.blob) return;
+  const filename = `${item.base}-watermark.${item.ext}`;
+  if (IS_MOBILE) {
+    const file = makeFile(item.blob, filename);
+    if (file && await shareFiles([file], 'Watermarked image')) return;
+  }
+  triggerDownload(item.blob, filename);
 }
 
 async function downloadAll() {
-  const done = queue.filter(i => i.status === 'done');
+  const done = queue.filter(i => i.status === 'done' && i.blob);
   if (done.length === 0) return;
-  for (const item of done) {
-    const link = document.createElement('a');
-    link.download = `${item.base}-watermark.${item.ext}`;
-    link.href = item.dataUrl;
-    link.click();
-    await new Promise(r => setTimeout(r, 300));
+  const btn = document.getElementById('btnDlAll');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+
+  // Build unique filenames once.
+  const used = {};
+  const named = done.map(item => {
+    let name = `${item.base}-watermark.${item.ext}`;
+    if (used[name]) { const n = used[name]++; name = `${item.base}-watermark-${n}.${item.ext}`; }
+    else used[name] = 1;
+    return { item, name };
+  });
+
+  // On mobile, prefer the OS share sheet — iOS shows "Save N Images"
+  // which saves directly to Photos. A ZIP would only land in Files.
+  if (IS_MOBILE) {
+    const files = named.map(n => makeFile(n.item.blob, n.name)).filter(Boolean);
+    if (files.length && canShareFiles(files)) {
+      const shared = await shareFiles(files, 'Watermarked images');
+      if (shared) { btn.innerHTML = original; btn.disabled = false; return; }
+    }
+    // Mobile but no multi-file share: save one at a time via share/download.
+    for (const n of named) {
+      const file = makeFile(n.item.blob, n.name);
+      if (!(file && canShareFiles([file]) && await shareFiles([file]))) {
+        triggerDownload(n.item.blob, n.name);
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
+    btn.innerHTML = original;
+    btn.disabled = false;
+    return;
+  }
+
+  // Desktop: bundle into one ZIP so the browser doesn't block
+  // multiple simultaneous downloads.
+  if (window.JSZip) {
+    btn.innerHTML = '<i class="ti ti-loader" aria-hidden="true"></i> Zipping\u2026';
+    try {
+      const zip = new window.JSZip();
+      named.forEach(n => zip.file(n.name, n.item.blob));
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      triggerDownload(zipBlob, 'watermarked-images.zip');
+    } catch (e) {
+      await downloadSequential(named);
+    }
+    btn.innerHTML = original;
+    btn.disabled = false;
+    return;
+  }
+
+  await downloadSequential(named);
+  btn.innerHTML = original;
+  btn.disabled = false;
+}
+
+async function downloadSequential(named) {
+  for (const n of named) {
+    triggerDownload(n.item.blob, n.name);
+    await new Promise(r => setTimeout(r, 400));
   }
 }
+
+/* ── Mobile label tweaks ─────────────────── */
+(function () {
+  if (!IS_MOBILE) return;
+  let shareable = false;
+  try {
+    shareable = canShareFiles([new File(['x'], 'x.png', { type: 'image/png' })]);
+  } catch (e) { shareable = false; }
+  if (!shareable) return;
+  const dlAll = document.getElementById('btnDlAll');
+  if (dlAll) dlAll.innerHTML = '<i class="ti ti-device-mobile-share" aria-hidden="true"></i> Save all to Photos';
+  const single = document.getElementById('downloadBtn');
+  if (single) single.innerHTML = '<i class="ti ti-device-mobile-share" aria-hidden="true"></i> Save';
+})();
 </script>
 </body>
 </html>
